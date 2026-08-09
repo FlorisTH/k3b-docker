@@ -14,4 +14,4 @@ for i in $(seq 1 60); do
     sleep 0.5
 done
 
-exec /usr/lib/udisks2/udisksd --no-debug
+exec /usr/libexec/udisks2/udisksd --no-debug
