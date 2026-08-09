@@ -48,7 +48,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ github.ref_name == 'main' && 'Dockerfile' || 'Dockerfile.ffmpeg' }}
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:${{ steps.tag.outputs.moving_tag }}
