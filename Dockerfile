@@ -20,6 +20,8 @@ RUN add-pkg \
         udisks2 \
         eudev
 
+RUN sed -i '/<user>messagebus<\/user>/d' /usr/share/dbus-1/system.conf
+
 # Service definitions (dbus + udisksd) and app init.
 COPY rootfs/ /
 RUN chmod +x \
