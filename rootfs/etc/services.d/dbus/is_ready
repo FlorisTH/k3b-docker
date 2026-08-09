@@ -1,8 +1,0 @@
-#!/bin/sh
-# The baseimage calls this repeatedly (until it exits 0 or ready_timeout
-# elapses) to decide when the service counts as "up". This is the fix for
-# the entire race: checking a live bus response, not a socket file existing.
-
-dbus-send --system --print-reply \
-    --dest=org.freedesktop.DBus /org/freedesktop/DBus \
-    org.freedesktop.DBus.ListNames >/dev/null 2>&1

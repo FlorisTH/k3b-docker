@@ -1,3 +1,0 @@
-#!/bin/sh
-udevadm trigger --type=devices --action=add
-udevadm settle --timeout=10

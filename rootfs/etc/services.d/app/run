@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# Launches K3b as the supervised 'app' service.
+#
+# No longer waits on or checks for udisksd - K3b's optical drive is
+# registered manually via its own UI (Settings > Setup Devices > Add
+# Device), so nothing here needs UDisks2 to be present on the bus.
+# See README.md for the one-time manual setup step.
+
+exec /usr/bin/k3b

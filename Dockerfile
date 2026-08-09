@@ -1,46 +1,54 @@
-# Custom K3b container, built on jlesage's baseimage-gui instead of a
-# general-purpose webtop image. This gets us:
-#   - The same web GUI / VNC plumbing that ImgBurn and Xfburn use
-#   - Proper s6-style supervised services with readiness checks, so we can
-#     make udisksd wait for a REAL dbus connection instead of guessing with
-#     sleep loops, and make K3b wait for udisksd to actually register
-#     org.freedesktop.UDisks2 before it ever launches.
-#
-# Check for a newer tag at https://hub.docker.com/r/jlesage/baseimage-gui/tags
+# Pull base image.
 FROM jlesage/baseimage-gui:alpine-3.19-v4
 
-# K3b + burning backends + the D-Bus/udisks stack K3b needs for automatic
-# drive discovery (K3b >= ~24.x has no manual "Add Device" fallback anymore).
-RUN add-pkg \
+# Install K3b and its burning backends, plus D-Bus (needed only for the
+# desktop/GUI session itself, NOT for optical drive detection).
+#
+# NOTE: udisks2 and eudev are intentionally NOT installed. K3b's automatic
+# drive detection goes through Solid -> UDisks2, which requires a working
+# D-Bus system bus with a root-owned dbus-daemon (something this container
+# can't provide, since everything runs unprivileged). Instead, the drive is
+# added manually in K3b (Settings > Setup Devices > Add Device -> /dev/sr0),
+# and the actual burn is handed directly to cdrdao/wodim/growisofs against
+# the device node - no UDisks2 involved. See README.md for details.
+RUN \
+    add-pkg \
         k3b \
         cdrdao \
         cdrkit \
         dvd+rw-tools \
-        dbus \
-        udisks2 \
-        eudev
+        dbus
 
+# Generate and install favicons.
+RUN \
+    APP_ICON_URL=https://github.com/jlesage/docker-templates/raw/master/jlesage/images/k3b-icon.png && \
+    install_app_icon.sh "$APP_ICON_URL" || true
+
+# Remove the <user>messagebus</user> directive from dbus's system config.
+# dbus-daemon --system normally starts as root and drops privileges to the
+# messagebus user; in this container dbus-daemon already runs unprivileged
+# (as the app user), so it can't switch users. Without this, dbus fails with
+# "Failed to drop supplementary groups: Operation not permitted".
 RUN sed -i '/<user>messagebus<\/user>/d' /usr/share/dbus-1/system.conf
 
-# Service definitions (dbus + udisksd) and app init.
+# Add files.
 COPY rootfs/ /
+
+# Make sure all our added scripts are executable.
 RUN chmod +x \
-        /etc/services.d/dbus/run \
-        /etc/services.d/udevd/run \
-        /etc/services.d/udevd/is_ready \
-        /etc/services.d/udev-trigger/run \
-        /etc/services.d/dbus/is_ready \
-        /etc/services.d/udisksd/run \
-        /etc/services.d/udisksd/is_ready \
-        /etc/cont-init.d/12-dbus-dir.sh \
-        /etc/cont-init.d/13-dbus-user.sh
+    /etc/cont-init.d/12-dbus-dir.sh \
+    /etc/cont-init.d/13-dbus-user.sh \
+    /etc/services.d/app/run
 
-# Start script that finally launches K3b itself.
-COPY startapp.sh /startapp.sh
-RUN chmod +x /startapp.sh
+# Define the application's ports.
+EXPOSE 5800
+EXPOSE 5900
 
-# App metadata shown in the web UI.
-RUN set-cont-env APP_NAME "K3b"
-
-# Persisted K3b config/state.
-VOLUME ["/config"]
+# Metadata.
+ARG DOCKER_IMAGE_VERSION
+ENV APP_NAME="K3b"
+LABEL \
+      org.label-schema.name="k3b-docker" \
+      org.label-schema.description="Docker container for K3b" \
+      org.label-schema.version="${DOCKER_IMAGE_VERSION:-unknown}" \
+      org.label-schema.schema-version="1.0"

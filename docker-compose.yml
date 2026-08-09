@@ -1,23 +1,20 @@
 services:
   k3b:
-    # Built and pushed automatically by .github/workflows/build.yml — TrueNAS
-    # only needs to pull, no local build tools required.
-    image: ghcr.io/FlorisTH/k3b-docker:latest
+    image: ghcr.io/floristh/k3b-docker:latest
     container_name: k3b
-    ports:
-      - "5800:5800"   # web GUI
-      - "5900:5900"   # VNC (optional)
+    devices:
+      - /dev/sr0:/dev/sr0
+      - /dev/sg3:/dev/sg3
+    cap_add:
+      - SYS_RAWIO
     environment:
       - USER_ID=1000
       - GROUP_ID=1000
-      - SUP_GROUP_IDS=24   # match the host's cdrom GID (confirmed via `stat -c '%g' /dev/sr0`)
+      - SUP_GROUP_IDS=24
       - TZ=Europe/Amsterdam
-      - DARK_MODE=1
-    cap_add:
-      - SYS_RAWIO
-    devices:
-      - "/dev/sr0:/dev/sr0"
-      - "/dev/sg3:/dev/sg3"
+    ports:
+      - '5800:5800'
     volumes:
-      - "/mnt/FastNAS/CDBurn/k3b-config:/config:rw"
-      - "/mnt/FastNAS/CDBurn:/storage:rw"
+      - /mnt/FastNAS/CDBurn/k3b-config:/config:rw
+      - /mnt/FastNAS/CDBurn:/storage:rw
+    restart: unless-stopped
