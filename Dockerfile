@@ -17,7 +17,9 @@ RUN \
         cdrdao \
         cdrkit \
         dvd+rw-tools \
-        dbus
+        dbus \
+        font-noto \
+        fontconfig
 
 # Generate and install favicons.
 RUN \
