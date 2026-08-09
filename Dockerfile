@@ -20,7 +20,8 @@ RUN \
         eudev \
         lsscsi \
         font-noto \
-        fontconfig
+        fontconfig \
+        ffmpeg
 
 # Generate and install favicons.
 RUN \
