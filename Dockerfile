@@ -37,6 +37,8 @@ RUN sed -i '/<user>messagebus<\/user>/d' /usr/share/dbus-1/system.conf
 # Add files.
 COPY rootfs/ /
 
+RUN chmod +x /etc/cont-init.d/*.sh
+
 # Make sure all our added scripts are executable.
 RUN chmod +x \
     /etc/cont-init.d/12-dbus-dir.sh \
