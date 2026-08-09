@@ -1,0 +1,8 @@
+#!/bin/sh
+# Confirms udisksd didn't just claim the bus name but is actually alive and
+# responding - this is the same Ping check that proved useful during manual
+# troubleshooting.
+
+dbus-send --system --print-reply \
+    --dest=org.freedesktop.UDisks2 /org/freedesktop/UDisks2 \
+    org.freedesktop.DBus.Peer.Ping >/dev/null 2>&1

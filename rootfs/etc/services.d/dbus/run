@@ -1,0 +1,11 @@
+#!/bin/sh
+# Runs the real system D-Bus daemon under the process supervisor, so it's
+# managed (and restarted on crash) the same way every other baseimage
+# service is - not fired once from an init script and forgotten.
+
+mkdir -p /run/dbus
+rm -f /run/dbus/pid
+
+# --nofork: stay in the foreground so the supervisor can track/restart it.
+# --nopidfile: we don't need the pidfile, the supervisor tracks the PID.
+exec dbus-daemon --system --nofork --nopidfile

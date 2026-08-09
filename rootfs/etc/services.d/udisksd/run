@@ -1,0 +1,17 @@
+#!/bin/sh
+# The baseimage's supervisor starts services.d entries in directory order
+# and honors each one's is_ready/ready_timeout before considering it up -
+# but doesn't guarantee START order against OTHER services by itself, so we
+# still explicitly wait on dbus's own readiness check here as a belt-and-
+# braces measure. This is cheap (it's just polling the same check dbus
+# already exposes) and makes this service self-contained regardless of
+# supervisor scheduling details.
+
+for i in $(seq 1 60); do
+    dbus-send --system --print-reply \
+        --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus.ListNames >/dev/null 2>&1 && break
+    sleep 0.5
+done
+
+exec /usr/lib/udisks2/udisksd --no-debug
