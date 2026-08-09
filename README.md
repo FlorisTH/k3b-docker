@@ -1,95 +1,43 @@
 # k3b-docker
 
-K3b running in a `jlesage/baseimage-gui` container, accessed via a web browser
-on port 5800.
+A Dockerized version of [K3b](https://userbase.kde.org/K3b), the feature-rich, easy-to-use CD/DVD/Blu-ray burning application for Linux. 
 
-## How drive detection works
+This image is built on top of [jlesage/baseimage-gui](https://github.com/jlesage/docker-baseimage-gui), providing a lightweight Alpine Linux base with a built-in web-based GUI (accessible via your browser) and VNC support.
 
-Modern (KF5-based) K3b has no manual "add device" fallback in its UI - it
-relies entirely on KDE's Solid framework, which in turn requires UDisks2 to
-be running and to know about the drive. Getting that working unprivileged
-inside a container needs several pieces working together, in this order:
+## Why this image?
 
-1. **`dbus`** - the system message bus. Runs as the unprivileged app user
-   (the `<user>messagebus</user>` directive is stripped from its config at
-   build time, since a non-root process can't switch users).
-2. **`udevd`** - runs as root (the one service in this image that does).
-   Needed so device events can be processed at all.
-3. **`udev-trigger`** - a one-shot step that asks the kernel to re-emit
-   "add" events for devices that already existed when the container booted
-   (a cold boot never triggers these automatically). This requires write
-   access to `/sys`, which is why the compose file mounts it `rw`.
-4. **`udisksd`** - waits for both `dbus` and `udev-trigger`, then starts,
-   claims the `org.freedesktop.UDisks2` D-Bus name (permitted via the
-   `k3b-udisks2.conf` policy file for the unprivileged app user), and reads
-   the udev database populated in step 3.
-5. **`app`** (K3b itself) - waits for `udisksd`, then starts. Solid asks
-   UDisks2 for the device list, gets it, and K3b sees `/dev/sr0`.
+Modern versions of K3b rely entirely on the KDE Solid framework and `UDisks2` to discover optical hardware. The old "manual device addition" feature was removed from the application[cite: 7]. 
 
-The empty `*.dep` files in `rootfs/etc/services.d/*/` are what wire this
-dependency order into the supervisor - each is just a marker file named
-after the service it depends on.
+Because standard Docker containers are isolated from host hardware events, running modern K3b in Docker typically results in a "No optical drive found" error. This image solves that by bundling a full `eudev`, `dbus`, and `udisks2` stack inside the container[cite: 7]. With the correct privileges, the container can actively probe the host's `/sys` tree on boot and accurately map the CD/DVD/Blu-ray drives into K3b natively.
 
-## Security note on `/sys`
+## Usage
 
-The compose file mounts `/sys:/sys:rw`. This is broader than strictly
-necessary (only one device's uevent file actually needs to be written) but
-is the standard, well-tested pattern for this kind of hardware-access
-container. A narrower alternative is bind-mounting only the specific PCI
-subtree your drive is attached to, at the cost of that mount breaking if the
-drive moves to a different port. See the Dockerfile/compose comments for
-where to make that change if you want to tighten it later.
+Below is a `docker-compose.yml` example. **Please read the Optical Drive Configuration Requirements section below carefully**, as standard device mapping is not enough for K3b to detect the drive.
 
-Since Docker does not remap container UIDs by default, root inside this
-container is the same root as on the host - `udevd` running as root here is
-a real privilege grant, not a sandboxed one. Don't expose extra ports or
-add capabilities beyond what's already here without re-checking this note.
-
-## Devices and permissions
-
-- `/dev/sr0` (and `/dev/sg3` if your drive needs generic SCSI access) must be
-  passed through via `devices:` in the compose file.
-- `SUP_GROUP_IDS` should match the host GID that owns `/dev/sr0` (confirmed
-  as `24`, the `cdrom` group, via `getent group cdrom` on TrueNAS).
-- `cap_add: SYS_RAWIO` is required for the low-level SCSI commands K3b's
-  backends issue.
-
-## Deploying
-
-```bash
-docker compose pull k3b
-docker compose up -d --force-recreate k3b
-docker logs -f k3b
-```
-
-Expected boot order in the logs: `dbus` starts clean, `udevd` starts,
-`udev-trigger` runs and exits (status 0), `udisksd` starts and logs
-`Acquired the name org.freedesktop.UDisks2 on the system message bus`, then
-`app` (K3b) starts. No "Permission denied" or "Read-only file system"
-errors anywhere in that sequence.
-
-## Troubleshooting
-
-If `udisksd` starts but the device still isn't found, check the chain
-directly:
-
-```bash
-docker exec -it k3b udevadm info /dev/sr0
-docker exec -it k3b ls -la /run/udev/data/ | grep -i sr
-docker exec -it k3b udisksctl status
-```
-
-- `udevadm info` empty -> the kernel doesn't see the device at all; check the
-  `devices:` passthrough in compose.
-- `/run/udev/data/` empty -> `udev-trigger` didn't actually tag the device;
-  confirm `/sys:/sys:rw` is really applied (`docker inspect k3b` and check
-  the Mounts section), and test manually:
-  `docker exec -it k3b sh -c "echo add > /sys/class/block/sr0/uevent"` -
-  this should return silently, not "Read-only file system".
-- `udisksctl status` prints only headers, no rows -> `udisksd` is running
-  but sees no devices in its database; re-check the previous step.
-
-If text isn't rendering anywhere in the GUI (blank dialogs, blank labels),
-that's a missing-font issue, unrelated to the above - confirm `font-noto`
-(or `ttf-dejavu` if you swapped it in for a smaller image) is actually
-present: `docker exec -it k3b fc-list`.
+```yaml
+services:
+  k3b:
+    image: ghcr.io/floristh/k3b-docker:latest
+    container_name: k3b
+    privileged: true
+    devices:
+      # Map the optical block device
+      - /dev/sr0:/dev/sr0
+      # Map the corresponding SCSI generic device
+      - /dev/sg3:/dev/sg3
+    cap_add:
+      - SYS_RAWIO
+    environment:
+      - USER_ID=1000
+      - GROUP_ID=1000
+      # Must match the host's group ID for /dev/sr0 (e.g., 24 for cdrom)
+      - SUP_GROUP_IDS=24
+      - TZ=Europe/Amsterdam
+    ports:
+      - '5800:5800'
+    volumes:
+      - /path/to/k3b-config:/config:rw
+      - /path/to/storage:/storage:rw
+      # Required for internal udev device discovery
+      - /sys:/sys:rw
+    restart: unless-stopped
