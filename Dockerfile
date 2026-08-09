@@ -26,6 +26,9 @@ RUN sed -i '/<user>messagebus<\/user>/d' /usr/share/dbus-1/system.conf
 COPY rootfs/ /
 RUN chmod +x \
         /etc/services.d/dbus/run \
+        /etc/services.d/udevd/run \
+        /etc/services.d/udevd/is_ready \
+        /etc/services.d/udev-trigger/run \
         /etc/services.d/dbus/is_ready \
         /etc/services.d/udisksd/run \
         /etc/services.d/udisksd/is_ready \
