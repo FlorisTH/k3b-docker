@@ -10,9 +10,6 @@ on:
       - ".github/workflows/build.yml"
   workflow_dispatch: {}   # lets you trigger a rebuild manually from the Actions tab
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -23,6 +20,10 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
+
+      - name: Compute lowercase image name
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -44,7 +45,7 @@ jobs:
           platforms: linux/amd64   # add linux/arm64 here too if you ever want a Pi build
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
