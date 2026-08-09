@@ -2,6 +2,7 @@ services:
   k3b:
     image: ghcr.io/floristh/k3b-docker:latest
     container_name: k3b
+    privileged: true
     devices:
       - /dev/sr0:/dev/sr0
       - /dev/sg3:/dev/sg3
@@ -20,8 +21,6 @@ services:
       - /mnt/FastNAS/CDBurn:/storage:rw
       # Required so udevadm trigger can write to each device's /sys uevent
       # file, which is what makes udevd emit the "add" event that populates
-      # the udev database udisksd reads from. Docker mounts /sys read-only
-      # by default even with --device passthrough; this overrides that.
-      # See README.md "Security note on /sys" before deploying.
+      # the udev database udisksd reads from.
       - /sys:/sys:rw
     restart: unless-stopped
