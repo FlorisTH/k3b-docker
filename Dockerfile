@@ -14,7 +14,7 @@ FROM jlesage/baseimage-gui:alpine-3.19-v4
 RUN add-pkg \
         k3b \
         cdrdao \
-        wodim \
+        cdrkit \
         dvd+rw-tools \
         dbus \
         udisks2 \
