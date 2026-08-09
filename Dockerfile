@@ -1,16 +1,14 @@
 # Pull base image.
 FROM jlesage/baseimage-gui:alpine-3.19-v4
 
-# Install K3b and its burning backends, plus D-Bus (needed only for the
-# desktop/GUI session itself, NOT for optical drive detection).
+# Install K3b, its burning backends, and the D-Bus/udisks2/udev stack it
+# needs for drive detection.
 #
-# NOTE: udisks2 and eudev are intentionally NOT installed. K3b's automatic
-# drive detection goes through Solid -> UDisks2, which requires a working
-# D-Bus system bus with a root-owned dbus-daemon (something this container
-# can't provide, since everything runs unprivileged). Instead, the drive is
-# added manually in K3b (Settings > Setup Devices > Add Device -> /dev/sr0),
-# and the actual burn is handed directly to cdrdao/wodim/growisofs against
-# the device node - no UDisks2 involved. See README.md for details.
+# NOTE: modern (KF5-based) K3b has no manual "add device" fallback - it
+# relies entirely on Solid -> UDisks2 to discover optical drives. UDisks2
+# in turn needs udev to have tagged the device (ID_CDROM=1 etc.) via a
+# live kernel event, which is why eudev is installed too - see the
+# udevd/udev-trigger services under rootfs/etc/services.d/.
 RUN \
     add-pkg \
         k3b \
@@ -18,6 +16,9 @@ RUN \
         cdrkit \
         dvd+rw-tools \
         dbus \
+        udisks2 \
+        eudev \
+        lsscsi \
         font-noto \
         fontconfig
 
@@ -40,7 +41,18 @@ COPY rootfs/ /
 RUN chmod +x \
     /etc/cont-init.d/12-dbus-dir.sh \
     /etc/cont-init.d/13-dbus-user.sh \
-    /etc/services.d/app/run
+    /etc/services.d/app/run \
+    /etc/services.d/udisksd/run \
+    /etc/services.d/udisksd/is_ready \
+    /etc/services.d/udevd/run \
+    /etc/services.d/udevd/is_ready \
+    /etc/services.d/udev-trigger/run
+
+# NOTE: rootfs/etc/dbus-1/system.d/k3b-udisks2.conf (copied in above via
+# COPY rootfs/ /) grants the unprivileged app user permission to own the
+# org.freedesktop.UDisks2 bus name. D-Bus policy files are additive, so
+# this works alongside the package's own root-only policy without needing
+# to edit or remove it.
 
 # Define the application's ports.
 EXPOSE 5800

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/libexec/udisks2/udisksd --no-debug

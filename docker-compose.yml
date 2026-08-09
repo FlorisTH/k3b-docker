@@ -17,4 +17,10 @@ services:
     volumes:
       - /mnt/FastNAS/CDBurn/k3b-config:/config:rw
       - /mnt/FastNAS/CDBurn:/storage:rw
+      # Required so udevadm trigger can write to each device's /sys uevent
+      # file, which is what makes udevd emit the "add" event that populates
+      # the udev database udisksd reads from. Docker mounts /sys read-only
+      # by default even with --device passthrough; this overrides that.
+      # See README.md "Security note on /sys" before deploying.
+      - /sys:/sys:rw
     restart: unless-stopped

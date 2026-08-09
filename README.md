@@ -3,58 +3,93 @@
 K3b running in a `jlesage/baseimage-gui` container, accessed via a web browser
 on port 5800.
 
-## Why there's no UDisks2 / udev in this image
+## How drive detection works
 
-K3b's *automatic* drive detection goes through KDE's Solid framework, which
-needs a fully working D-Bus system bus with UDisks2 registered on it. Getting
-that running unprivileged inside a container turned out to be a dead end —
-UDisks2 refuses to claim its D-Bus name unless it's running as root, and
-udev's device tagging needs a writable `/sys`, which Docker mounts read-only
-by default. Granting either of those to the container is a bigger attack
-surface than this needs.
+Modern (KF5-based) K3b has no manual "add device" fallback in its UI - it
+relies entirely on KDE's Solid framework, which in turn requires UDisks2 to
+be running and to know about the drive. Getting that working unprivileged
+inside a container needs several pieces working together, in this order:
 
-Instead, this image follows the same approach as jlesage's own
-`docker-imgburn` and `docker-makemkv`: pass the device node straight through
-and let the app talk to it directly. K3b supports this via manual device
-registration, which bypasses Solid entirely — once added, K3b hands the
-actual burn to `cdrdao`/`wodim`/`growisofs` against the device path, no
-UDisks2 involved.
+1. **`dbus`** - the system message bus. Runs as the unprivileged app user
+   (the `<user>messagebus</user>` directive is stripped from its config at
+   build time, since a non-root process can't switch users).
+2. **`udevd`** - runs as root (the one service in this image that does).
+   Needed so device events can be processed at all.
+3. **`udev-trigger`** - a one-shot step that asks the kernel to re-emit
+   "add" events for devices that already existed when the container booted
+   (a cold boot never triggers these automatically). This requires write
+   access to `/sys`, which is why the compose file mounts it `rw`.
+4. **`udisksd`** - waits for both `dbus` and `udev-trigger`, then starts,
+   claims the `org.freedesktop.UDisks2` D-Bus name (permitted via the
+   `k3b-udisks2.conf` policy file for the unprivileged app user), and reads
+   the udev database populated in step 3.
+5. **`app`** (K3b itself) - waits for `udisksd`, then starts. Solid asks
+   UDisks2 for the device list, gets it, and K3b sees `/dev/sr0`.
 
-## One-time setup after first deploy
+The empty `*.dep` files in `rootfs/etc/services.d/*/` are what wire this
+dependency order into the supervisor - each is just a marker file named
+after the service it depends on.
 
-1. Deploy the container (see `docker-compose.yml`).
-2. Open `http://<host>:5800` in a browser.
-3. If K3b shows "No optical drive found": Settings → Setup Devices → Add
-   Device → enter `/dev/sr0`.
-4. This is saved under `/config`, which is a persistent volume, so it
-   survives `docker compose up -d --force-recreate`.
+## Security note on `/sys`
+
+The compose file mounts `/sys:/sys:rw`. This is broader than strictly
+necessary (only one device's uevent file actually needs to be written) but
+is the standard, well-tested pattern for this kind of hardware-access
+container. A narrower alternative is bind-mounting only the specific PCI
+subtree your drive is attached to, at the cost of that mount breaking if the
+drive moves to a different port. See the Dockerfile/compose comments for
+where to make that change if you want to tighten it later.
+
+Since Docker does not remap container UIDs by default, root inside this
+container is the same root as on the host - `udevd` running as root here is
+a real privilege grant, not a sandboxed one. Don't expose extra ports or
+add capabilities beyond what's already here without re-checking this note.
 
 ## Devices and permissions
 
 - `/dev/sr0` (and `/dev/sg3` if your drive needs generic SCSI access) must be
   passed through via `devices:` in the compose file.
-- `SUP_GROUP_IDS` should match the host GID that owns `/dev/sr0` (commonly
-  the `cdrom` group, GID 24 on Debian/Ubuntu-based hosts — check with
-  `ls -la /dev/sr0` on the host and adjust if different).
+- `SUP_GROUP_IDS` should match the host GID that owns `/dev/sr0` (confirmed
+  as `24`, the `cdrom` group, via `getent group cdrom` on TrueNAS).
 - `cap_add: SYS_RAWIO` is required for the low-level SCSI commands K3b's
   backends issue.
 
-## Troubleshooting
+## Deploying
 
-Check container logs first:
-
-```
+```bash
+docker compose pull k3b
+docker compose up -d --force-recreate k3b
 docker logs -f k3b
 ```
 
-You should see `dbus` and `app` start cleanly with no permission errors. If
-`dbus` fails, check `/config` ownership and the `USER_ID`/`GROUP_ID` env vars
-match what owns your config volume on the host.
+Expected boot order in the logs: `dbus` starts clean, `udevd` starts,
+`udev-trigger` runs and exits (status 0), `udisksd` starts and logs
+`Acquired the name org.freedesktop.UDisks2 on the system message bus`, then
+`app` (K3b) starts. No "Permission denied" or "Read-only file system"
+errors anywhere in that sequence.
 
-If K3b still can't see `/dev/sr0` after manually adding it, confirm the
-device is actually visible and readable inside the container:
+## Troubleshooting
 
+If `udisksd` starts but the device still isn't found, check the chain
+directly:
+
+```bash
+docker exec -it k3b udevadm info /dev/sr0
+docker exec -it k3b ls -la /run/udev/data/ | grep -i sr
+docker exec -it k3b udisksctl status
 ```
-docker exec -it k3b ls -la /dev/sr0
-docker exec -it k3b cdrecord -scanbus
-```
+
+- `udevadm info` empty -> the kernel doesn't see the device at all; check the
+  `devices:` passthrough in compose.
+- `/run/udev/data/` empty -> `udev-trigger` didn't actually tag the device;
+  confirm `/sys:/sys:rw` is really applied (`docker inspect k3b` and check
+  the Mounts section), and test manually:
+  `docker exec -it k3b sh -c "echo add > /sys/class/block/sr0/uevent"` -
+  this should return silently, not "Read-only file system".
+- `udisksctl status` prints only headers, no rows -> `udisksd` is running
+  but sees no devices in its database; re-check the previous step.
+
+If text isn't rendering anywhere in the GUI (blank dialogs, blank labels),
+that's a missing-font issue, unrelated to the above - confirm `font-noto`
+(or `ttf-dejavu` if you swapped it in for a smaller image) is actually
+present: `docker exec -it k3b fc-list`.
