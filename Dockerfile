@@ -27,6 +27,7 @@ RUN chmod +x \
         /etc/services.d/dbus/is_ready \
         /etc/services.d/udisksd/run \
         /etc/services.d/udisksd/is_ready
+        /etc/cont-init.d/05-dbus-dir.sh
 
 # Start script that finally launches K3b itself.
 COPY startapp.sh /startapp.sh
