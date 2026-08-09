@@ -2,7 +2,7 @@ services:
   k3b:
     # Built and pushed automatically by .github/workflows/build.yml — TrueNAS
     # only needs to pull, no local build tools required.
-    image: ghcr.io/<your-github-username>/<your-repo-name>:latest
+    image: ghcr.io/FlorisTH/k3b-docker:latest
     container_name: k3b
     ports:
       - "5800:5800"   # web GUI
