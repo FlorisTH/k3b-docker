@@ -10,6 +10,13 @@
 mkdir -p /run/dbus
 chown "${USER_ID:-1000}:${GROUP_ID:-1000}" /run/dbus
 
+# /var/run is usually a symlink to /run on Alpine, but don't assume it -
+# dbus-daemon's default system.conf <listen> address points at
+# /var/run/dbus/system_bus_socket, so make sure that resolves to something
+# writable regardless of whether the symlink exists.
+mkdir -p /var/run/dbus
+chown "${USER_ID:-1000}:${GROUP_ID:-1000}" /var/run/dbus
+
 mkdir -p /run/udisks2
 chown "${USER_ID:-1000}:${GROUP_ID:-1000}" /run/udisks2
 

@@ -42,6 +42,8 @@ RUN chmod +x \
     /etc/cont-init.d/12-dbus-dir.sh \
     /etc/cont-init.d/13-dbus-user.sh \
     /etc/services.d/app/run \
+    /etc/services.d/dbus/run \
+    /etc/services.d/dbus/is_ready \
     /etc/services.d/udisksd/run \
     /etc/services.d/udisksd/is_ready \
     /etc/services.d/udevd/run \

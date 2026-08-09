@@ -1,0 +1,11 @@
+#!/bin/sh
+#
+# Overrides baseimage-gui's default 'dbus' service. The base image's own
+# version launches a SESSION bus (dbus-daemon --session, listening at
+# /tmp/dbus.base) for desktop/GUI use - notifications, clipboard, etc.
+# udisksd needs the SYSTEM bus, which nothing in the base image starts.
+# This launches that system bus instead, using /etc/dbus-1/system.conf
+# (which has the <user>messagebus</user> directive stripped at build time,
+# since this process runs as the unprivileged app user, not root).
+
+exec dbus-daemon --system --nofork --nosyslog --nopidfile
